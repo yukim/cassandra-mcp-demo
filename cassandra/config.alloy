@@ -129,7 +129,7 @@ otelcol.exporter.otlphttp "default" {
 // server-side Cassandra metrics.
 prometheus.scrape "cassandra_easy_stress" {
   targets = [{
-    __address__ = "cassandra-easy-stress:9501",
+    __address__ = "cassandra-easy-stress:9500",
   }]
   scrape_interval = "15s"
   metrics_path    = "/metrics"
