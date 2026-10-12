@@ -1,6 +1,7 @@
 *
 !*/
 
+!README.md
 !compose.yaml
 !cassandra/config.alloy
 !cassandra/jmx-exporter-config.yaml
