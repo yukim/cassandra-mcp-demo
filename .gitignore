@@ -1,0 +1,9 @@
+*
+!*/
+
+!compose.yaml
+!cassandra/config.alloy
+!cassandra/jmx-exporter-config.yaml
+!cassandra/jvm-server.options
+!cassandra/logback.xml
+!cassandra/pyroscope.properties

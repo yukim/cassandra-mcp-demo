@@ -1,0 +1,143 @@
+livedebugging {}
+
+loki.source.file "cassandra" {
+  targets = [{
+    __path__ = "/var/log/cassandra/system.log",
+  }]
+  forward_to = [loki.process.cassandra.receiver]
+}
+
+loki.process "cassandra" {
+  forward_to = [otelcol.receiver.loki.default.receiver]
+
+  // Indexed stream labels — must use valid Loki label names (no dots).
+  // These are queryable with {label="value"} selectors in LogQL.
+  stage.static_labels {
+    values = {
+      service_name   = "cassandra",
+      cassandra_dc   = "dc1",
+      cassandra_rack = "rack1",
+    }
+  }
+
+  // OTel-convention attributes forwarded as non-indexed structured metadata.
+  // The otelcol.receiver.loki pipeline reads these for OTLP correlation.
+  stage.structured_metadata {
+    values = {
+      "service.name"      = "test_cluster",
+      "service.namespace" = "cassandra",
+      "service.version"   = "5.0.9",
+      "cassandra.dc"      = "dc1",
+      "cassandra.rack"    = "rack1",
+    }
+  }
+
+  stage.json {
+    expressions = {
+      message = "formattedMessage",
+      level = "",
+      logger = "loggerName",
+      throwable = "",
+      ts = "[to_string(timestamp),to_string(nanoseconds)[3:]] | join('',@)",
+    }
+  }
+
+  stage.labels {
+    values = {
+      level = "",
+    }
+  }
+
+  stage.structured_metadata {
+    values = {
+      logger     = "",
+      threadName = "",
+      throwable  = "",
+    }
+  }
+
+  stage.timestamp {
+    source = "ts"
+    format = "UnixNs"
+  }
+
+  stage.output {
+    source = "message"
+  }
+}
+
+otelcol.receiver.otlp "default" {
+  grpc {}
+  http {}
+  output {
+    metrics = [otelcol.processor.attributes.cassandra.input]
+    logs    = [otelcol.exporter.otlphttp.default.input]
+  }
+}
+
+otelcol.processor.attributes "cassandra" {
+  action {
+    key    = "service.name"
+    value  = "test_cluster"
+    action = "upsert"
+  }
+  action {
+    key    = "service.namespace"
+    value  = "cassandra"
+    action = "upsert"
+  }
+  action {
+    key    = "service.version"
+    value  = "5.0.9"
+    action = "upsert"
+  }
+  action {
+    key    = "server.address"
+    value  = sys.env("HOST")
+    action = "upsert"
+  }
+  action {
+    key    = "cassandra.dc"
+    value  = "dc1"
+    action = "upsert"
+  }
+  action {
+    key    = "cassandra.rack"
+    value  = "rack1"
+    action = "upsert"
+  }
+  output {
+    metrics = [otelcol.exporter.otlphttp.default.input]
+  }
+}
+
+otelcol.receiver.loki "default" {
+  output {
+    logs = [otelcol.exporter.otlphttp.default.input]
+  }
+}
+
+otelcol.exporter.otlphttp "default" {
+  client {
+    endpoint = "http://lgtm:4318"
+  }
+}
+
+// ── cassandra-easy-stress client metrics ─────────────────────────────────────
+// Scrapes the Prometheus endpoint exposed by cassandra-easy-stress and forwards
+// metrics to the same LGTM stack so client-side latency can be compared with
+// server-side Cassandra metrics.
+prometheus.scrape "cassandra_easy_stress" {
+  targets = [{
+    __address__ = "cassandra-easy-stress:9501",
+  }]
+  scrape_interval = "15s"
+  metrics_path    = "/metrics"
+  forward_to      = [prometheus.remote_write.lgtm.receiver]
+}
+
+prometheus.remote_write "lgtm" {
+  endpoint {
+    url = "http://lgtm:9090/api/v1/write"
+  }
+}

@@ -1,0 +1,71 @@
+services:
+  cassandra:
+    image: cassandra:5.0
+    userns_mode: keep-id
+    ports:
+      - 9042:9042
+    volumes:
+      - db_data:/var/lib/cassandra/
+      - log_data:/var/log/cassandra/
+      - "./cassandra/logback.xml:/etc/cassandra/logback.xml:z"
+      - "./cassandra/jvm-server.options:/etc/cassandra/jvm-server.options:z"
+      - "./cassandra/jmx-exporter-config.yaml:/etc/cassandra/jmx-exporter-config.yaml:z"
+      - "./cassandra/jmx_prometheus_javaagent-1.6.0.jar:/etc/cassandra/jmx_exporter.jar:z"
+      - "./cassandra/pyroscope.jar:/etc/cassandra/pyroscope.jar:z"
+      - "./cassandra/pyroscope.properties:/etc/cassandra/pyroscope.properties:z"
+    networks:
+      - db
+    depends_on:
+      - lgtm
+    environment:
+      - MAX_HEAP_SIZE=1G
+    ulimits:
+      memlock: -1
+      nofile:
+        soft: 100000
+        hard: 100000
+    deploy:
+      resources:
+        limits:
+          cpus: 1
+          memory: 2G
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "DESCRIBE KEYSPACES"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+  alloy:
+    image: grafana/alloy:v1.20.0
+    userns_mode: keep-id
+    volumes:
+      - "log_data:/var/log/cassandra/:ro"
+      - "./cassandra/config.alloy:/etc/alloy/config.alloy:z"
+    command: ["run", "/etc/alloy/config.alloy"]
+    depends_on:
+      cassandra:
+        condition: service_healthy
+    networks:
+      - db
+  cassandra-easy-stress:
+    image: localhost/apache/cassandra-easy-stress
+    command: ["server"]
+    ports:
+      - 9000:9000
+    depends_on:
+      - alloy
+    networks:
+      - db
+  lgtm:
+    image: grafana/otel-lgtm:0.29.2
+    ports:
+      - 3000:3000
+    networks:
+      - db
+
+networks:
+  db:
+
+volumes:
+  log_data:
+  db_data:
