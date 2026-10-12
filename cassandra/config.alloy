@@ -20,18 +20,6 @@ loki.process "cassandra" {
     }
   }
 
-  // OTel-convention attributes forwarded as non-indexed structured metadata.
-  // The otelcol.receiver.loki pipeline reads these for OTLP correlation.
-  stage.structured_metadata {
-    values = {
-      "service.name"      = "test_cluster",
-      "service.namespace" = "cassandra",
-      "service.version"   = "5.0.9",
-      "cassandra.dc"      = "dc1",
-      "cassandra.rack"    = "rack1",
-    }
-  }
-
   stage.json {
     expressions = {
       message = "formattedMessage",
@@ -112,6 +100,25 @@ otelcol.processor.attributes "cassandra" {
 }
 
 otelcol.receiver.loki "default" {
+  output {
+    logs = [otelcol.processor.transform.cassandra_logs.input]
+  }
+}
+
+otelcol.processor.transform "cassandra_logs" {
+  error_mode = "ignore"
+
+  log_statements {
+    context = "resource"
+    statements = [
+      `set(resource.attributes["service.name"], "test_cluster")`,
+      `set(resource.attributes["service.namespace"], "cassandra")`,
+      `set(resource.attributes["service.version"], "5.0.9")`,
+      `set(resource.attributes["cassandra.dc"], "dc1")`,
+      `set(resource.attributes["cassandra.rack"], "rack1")`,
+    ]
+  }
+
   output {
     logs = [otelcol.exporter.otlphttp.default.input]
   }
